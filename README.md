@@ -42,9 +42,19 @@ are all measured at once.
 
 ## results
 
-| level | VUs | reqs | p95 | p99 | fail % | verdict |
-|-------|-----|------|-----|-----|--------|---------|
-| (to be filled from runs) | | | | | | |
+GitHub-hosted runner (4 vCPU, 16 GB): server (io_uring) pinned to cores 0-1,
+loadgen pinned to cores 2-3. Official pass bar: p95 < 500 ms, p99 < 1000 ms,
+<1% failed requests over the full hold window. [run 38891044251](https://github.com/ssmurfgg04-gif/tdsc-bench/actions/runs/38891044251)
+
+| level | VUs | reqs | req/s | avg | p95 | p99 | fail % | verdict |
+|-------|-----:|------:|------:|----:|----:|----:|-------:|---------|
+| 20k   | 20,000  | 708,851    | 1,969  | 3.0 ms  | 5 ms   | 10 ms  | 0.000% | PASS |
+| 100k  | 100,000 | 4,020,550  | 8,935  | 4.8 ms  | 10 ms  | 50 ms  | 0.000% | PASS |
+| 150k  | 150,000 | 6,267,749  | 13,058 | 5.1 ms  | 25 ms  | 50 ms  | 0.000% | PASS |
+| 200k  | 200,000 | 8,984,785  | 16,638 | 9.7 ms  | 100 ms | 100 ms | 0.000% | PASS |
+
+200k users held for the full 5 minutes with 5x headroom on the p95 threshold
+and zero failures of any kind, with the server limited to two cores.
 
 ## caveats
 

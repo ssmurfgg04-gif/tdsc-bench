@@ -9,9 +9,9 @@ B=/tmp/bench
 rm -rf "$B"; mkdir -p "$B"
 cp "$TDSC/seed/feed.db" "$B/feed.db"
 
-echo "== starting server (MAXCONN=300000, taskset 0-1)"
+echo "== starting server (MAXCONN=450000, taskset 0-1)"
 sudo -n bash -c "ulimit -n 1048576; SQLITE_PATH=$B/feed.db \
-  JWT_SECRET=twelve-dollar-challenge HOST=127.0.0.1 PORT=$PORT MAXCONN=300000 \
+  JWT_SECRET=twelve-dollar-challenge HOST=127.0.0.1 PORT=$PORT MAXCONN=450000 \
   taskset -c 0-1 bash $SUB/start.sh" > "$B/server.log" 2>&1 &
 
 ok=0
