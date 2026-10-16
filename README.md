@@ -52,9 +52,14 @@ loadgen pinned to cores 2-3. Official pass bar: p95 < 500 ms, p99 < 1000 ms,
 | 100k  | 100,000 | 4,020,550  | 8,935  | 4.8 ms  | 10 ms  | 50 ms  | 0.000% | PASS |
 | 150k  | 150,000 | 6,267,749  | 13,058 | 5.1 ms  | 25 ms  | 50 ms  | 0.000% | PASS |
 | 200k  | 200,000 | 8,984,785  | 16,638 | 9.7 ms  | 100 ms | 100 ms | 0.000% | PASS |
+| 250k  | 250,000 | 12,026,984 | 20,045 | 8.3 ms  | 50 ms  | 100 ms | 0.000% | PASS |
+| 300k  | 300,000 | 14,572,430 | 23,131 | 692 ms  | 25 s   | 25 s   | 6.660% | FAIL |
 
-200k users held for the full 5 minutes with 5x headroom on the p95 threshold
-and zero failures of any kind, with the server limited to two cores.
+250k users held for the full 5 minutes with zero failures and 5x headroom on
+the p95 threshold, with the server limited to two cores. 300k is where this
+setup tips over: almost all connections establish (295k peak) but the /feed
+path saturates around 23k req/s and latencies collapse, so the honest ceiling
+on a 2+2 core split is between the two.
 
 ## caveats
 
