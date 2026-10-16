@@ -1,0 +1,103 @@
+name: bench
+
+# Heavy load tests for the twelve-dollar-server-challenge submission.
+# Runs the server (io_uring) on 2 runner cores and a custom C load generator
+# (faithful reimplementation of bench/load.js) on the other 2, so we can find
+# the real connection ceiling past k6's single-source-IP port limit.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      levels:
+        description: 'matrix JSON, e.g. [{"vus":100000,"ramp":150,"hold":300,"tag":"100k"}]'
+        default: ''
+      server_branch:
+        description: 'branch of the fork to benchmark'
+        default: 'c-iouring-pr'
+
+permissions:
+  contents: read
+
+env:
+  SERVER_REPO: ssmurfgg04-gif/twelve-dollar-server-challenge
+
+jobs:
+  bench:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJSON(inputs.levels || '[{"vus":20000,"ramp":60,"hold":300,"tag":"20k-ref"},{"vus":100000,"ramp":150,"hold":300,"tag":"100k"},{"vus":150000,"ramp":180,"hold":300,"tag":"150k"},{"vus":200000,"ramp":240,"hold":300,"tag":"200k"}]') }}
+    env:
+      BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.server_branch || 'c-iouring-pr' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fetch server source
+        run: |
+          git clone --depth 1 -b "$BRANCH" "https://github.com/$SERVER_REPO.git" "$HOME/tdsc"
+          cd "$HOME/tdsc"
+          git apply "$GITHUB_WORKSPACE/patches/maxconn.patch"
+          git log -1 --oneline
+
+      - name: tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3 jq curl openssl unzip
+
+      - name: seed database
+        run: bash "$HOME/tdsc/seed/make-seed.sh"
+
+      - name: install + build server
+        run: |
+          sudo bash "$HOME/tdsc/submissions/c-iouring-ssmurfgg04-gif/install.sh"
+          bash "$HOME/tdsc/submissions/c-iouring-ssmurfgg04-gif/build.sh"
+
+      - name: build loadgen
+        run: bash "$GITHUB_WORKSPACE/loadgen/build.sh"
+
+      - name: tune kernel for many connections
+        run: |
+          sudo sysctl -w fs.file-max=4194304        || true
+          sudo sysctl -w fs.nr_open=1048576          || true
+          sudo sysctl -w net.core.somaxconn=65536    || true
+          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=65536 || true
+          sudo sysctl -w 'net.ipv4.ip_local_port_range=1024 65535' || true
+          sudo sysctl -w net.ipv4.tcp_tw_reuse=1     || true
+          sudo sysctl -w 'net.ipv4.tcp_mem=786432 1048576 1572864' || true
+          sudo sysctl -w 'net.ipv4.tcp_rmem=4096 87380 16777216'   || true
+          sudo sysctl -w 'net.ipv4.tcp_wmem=4096 65536 16777216'   || true
+          sudo sysctl -w vm.overcommit_memory=1      || true
+          ulimit -n 65535 2>/dev/null || true
+          nproc; free -m | head -2
+
+      - name: bench ${{ matrix.tag }}
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/run-bench.sh" \
+            "${{ matrix.vus }}" "${{ matrix.ramp }}" "${{ matrix.hold }}" \
+            "${{ matrix.tag }}" "$HOME/tdsc" "$GITHUB_WORKSPACE/loadgen/loadgen"
+
+      - name: job summary
+        if: always()
+        run: |
+          {
+            echo "## ${{ matrix.tag }} (${{ matrix.vus }} VUs, hold ${{ matrix.hold }}s)"
+            echo
+            echo '```'
+            cat /tmp/bench/run.log 2>/dev/null | tail -25 || echo "(no run log)"
+            echo '```'
+            echo
+            echo "server: \`${BRANCH}\` @ $(cd "$HOME/tdsc" && git rev-parse --short HEAD)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-${{ matrix.tag }}
+          path: |
+            /tmp/bench/run.log
+            /tmp/bench/server.log
+            /tmp/bench/stats.json
+          if-no-files-found: ignore
