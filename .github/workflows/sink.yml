@@ -26,11 +26,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: fetch tokens
-        run: |
-          git clone --depth 1 "https://github.com/ssmurfgg04-gif/twelve-dollar-server-challenge.git" "$HOME/tdsc"
-          ls "$HOME/tdsc/seed/tokens.json"
-
       - name: build sink + loadgen
         run: |
           cc -O2 -Wall -Wextra -o sink/sink sink/sink.c -lpthread
@@ -56,7 +51,7 @@ jobs:
           bash "$GITHUB_WORKSPACE/scripts/run-sink.sh" \
             "${{ matrix.vus }}" "${{ matrix.ramp }}" "${{ matrix.hold }}" \
             "${{ matrix.tag }}" "$GITHUB_WORKSPACE" \
-            "$GITHUB_WORKSPACE/loadgen/loadgen" "$HOME/tdsc/seed/tokens.json"
+            "$GITHUB_WORKSPACE/loadgen/loadgen" "$GITHUB_WORKSPACE/sink/tokens.json"
 
       - name: job summary
         if: always()

@@ -5,8 +5,6 @@ name: bench
 # (faithful reimplementation of bench/load.js) on the other 2, so we can find
 # the real connection ceiling past k6's single-source-IP port limit.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       levels:
