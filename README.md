@@ -61,6 +61,25 @@ setup tips over: almost all connections establish (295k peak) but the /feed
 path saturates around 23k req/s and latencies collapse, so the honest ceiling
 on a 2+2 core split is between the two.
 
+## the 300k wall is the rig, not the server (sink control experiment)
+
+To settle where the 300k failure lives, we ran the load generator against a
+[sink server](sink/) that answers canned responses with no database and no
+real request processing, instrumented with per-thread counters:
+
+| level | vs real server | vs canned sink | sink counters at 300k |
+|------:|----------------|----------------|-----------------------|
+| 250k  | PASS (avg 8.3 ms) | PASS (avg 0.2 ms, p95 1 ms, 0 fails) | - |
+| 300k  | FAIL (6.66%, p95 25 s) | FAIL (6.83%, p95 25 s) | requests 13.1M, responses 13.1M, write-EAGAIN 0, errors 0, pending 2 |
+
+The sink fails at 300k with the same signature as the real server while its
+own counters show it answered everything instantly with zero backpressure.
+Combined with the server-side instrumentation (handler and DB time 0.0 ms
+avg, WAL pinned at 0 KB, zero reader busy at every level), the 300k ceiling
+on this rig is the load generator and kernel side: two loadgen threads
+driving 300k loopback connections on two cores. The submission is not the
+bottleneck at 300k, and 250k remains the honest passing ceiling here.
+
 ## caveats
 
 - These are our own numbers for exploring the design's ceiling. Official
