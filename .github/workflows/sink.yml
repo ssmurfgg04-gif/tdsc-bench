@@ -1,0 +1,86 @@
+name: sink
+
+# Control experiment for the 300k wall: run the load generator against a
+# canned-response sink instead of the real server. No DB, no server build.
+# If the loadgen shows the same failure signature here, the wall is the
+# bench rig (loadgen + kernel), not the submission.
+on:
+  workflow_dispatch:
+    inputs:
+      levels:
+        description: 'matrix JSON, e.g. [{"vus":300000,"ramp":300,"hold":300,"tag":"300k-sink"}]'
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  sink:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include: ${{ fromJSON(inputs.levels || '[{"vus":250000,"ramp":300,"hold":300,"tag":"250k-sink"},{"vus":300000,"ramp":300,"hold":300,"tag":"300k-sink"}]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: fetch tokens
+        run: |
+          git clone --depth 1 "https://github.com/ssmurfgg04-gif/twelve-dollar-server-challenge.git" "$HOME/tdsc"
+          ls "$HOME/tdsc/seed/tokens.json"
+
+      - name: build sink + loadgen
+        run: |
+          cc -O2 -Wall -Wextra -o sink/sink sink/sink.c -lpthread
+          bash loadgen/build.sh
+
+      - name: tune kernel for many connections
+        run: |
+          sudo sysctl -w fs.file-max=4194304        || true
+          sudo sysctl -w fs.nr_open=1048576          || true
+          sudo sysctl -w net.core.somaxconn=65536    || true
+          sudo sysctl -w net.ipv4.tcp_max_syn_backlog=65536 || true
+          sudo sysctl -w 'net.ipv4.ip_local_port_range=1024 65535' || true
+          sudo sysctl -w net.ipv4.tcp_tw_reuse=1     || true
+          sudo sysctl -w 'net.ipv4.tcp_mem=786432 1048576 1572864' || true
+          sudo sysctl -w net.ipv4.tcp_rmem=4096 87380 16777216   || true
+          sudo sysctl -w net.ipv4.tcp_wmem=4096 65536 16777216   || true
+          sudo sysctl -w vm.overcommit_memory=1      || true
+          ulimit -n 65535 2>/dev/null || true
+          nproc; free -m | head -2
+
+      - name: sink bench ${{ matrix.tag }}
+        run: |
+          bash "$GITHUB_WORKSPACE/scripts/run-sink.sh" \
+            "${{ matrix.vus }}" "${{ matrix.ramp }}" "${{ matrix.hold }}" \
+            "${{ matrix.tag }}" "$GITHUB_WORKSPACE" \
+            "$GITHUB_WORKSPACE/loadgen/loadgen" "$HOME/tdsc/seed/tokens.json"
+
+      - name: job summary
+        if: always()
+        run: |
+          {
+            echo "## ${{ matrix.tag }} (canned-response sink, ${{ matrix.vus }} VUs)"
+            echo
+            echo '```'
+            tail -25 /tmp/bench/run.log 2>/dev/null || echo "(no run log)"
+            echo '```'
+            echo
+            echo 'sink counters (last 3):'
+            echo '```'
+            grep -a "sinkstats" /tmp/bench/sink.log 2>/dev/null | tail -3 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sink-${{ matrix.tag }}
+          path: |
+            /tmp/bench/run.log
+            /tmp/bench/sink.log
+            /tmp/bench/stats.json
+          if-no-files-found: ignore
