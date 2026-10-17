@@ -22,7 +22,7 @@ if [ "$MODE" = "1cpu2g" ]; then
     -p MemoryMax=2147483648 -p MemorySwapMax=0 \
     bash -c "ulimit -n 1048576; SQLITE_PATH=$B/feed.db \
       JWT_SECRET=twelve-dollar-challenge HOST=127.0.0.1 PORT=$PORT MAXCONN=450000 \
-      taskset -c 0 bash $SUB/start.sh" > "$B/server.log" 2>&1 &
+      taskset -c 0 bash $SUB/start.sh > $B/server_inner.log 2>&1" > "$B/server.log" 2>&1 &
 else
   echo "== starting server (MAXCONN=450000, taskset 0-1)"
   sudo -n bash -c "ulimit -n 1048576; SQLITE_PATH=$B/feed.db \
@@ -41,7 +41,8 @@ fi
 echo "== server up: $(head -c 200 "$B/server.log" | tr '\n' ' ')"
 
 # Prove the constraints actually apply to the running server process.
-SPID=$(pgrep -f "$SUB/bin/server" | head -1)
+# start.sh does `exec bin/server` (relative path), so match that.
+SPID=$(pgrep -f "bin/server" | head -1)
 if [ -n "$SPID" ]; then
   CGPATH=$(grep -o '0::.*' "/proc/$SPID/cgroup" 2>/dev/null | cut -c4-)
   echo "RIG: server pid $SPID cgroup: $CGPATH"
@@ -79,11 +80,15 @@ fi
 RC=$?
 cat "$B/run.log"
 
-sudo pkill -f "$SUB/bin/server" 2>/dev/null
+CGPATH=$(grep -o '0::.*' "/proc/$SPID/cgroup" 2>/dev/null | cut -c4-)
+if [ -n "$CGPATH" ] && [ "$MODE" = "1cpu2g" ]; then
+  echo "RIG: peak cgroup memory: $(cat "/sys/fs/cgroup$CGPATH/memory.peak" 2>/dev/null || echo 'n/a') bytes (cap 2147483648)"
+fi
+sudo pkill -f "bin/server" 2>/dev/null
 sleep 1
 
 echo "== server log tail"
-tail -15 "$B/server.log" || true
+tail -15 "$B/server_inner.log" 2>/dev/null || tail -15 "$B/server.log" || true
 
 read -r _ u n sys idle iow irq sirq steal rest < <(awk '/^cpu /{print; exit}' /proc/stat)
 J1=$((u+n+sys+idle+iow+irq+sirq+steal)); ST1=$steal

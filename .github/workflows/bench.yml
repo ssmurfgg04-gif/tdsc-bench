@@ -119,5 +119,6 @@ jobs:
           path: |
             /tmp/bench/run.log
             /tmp/bench/server.log
+            /tmp/bench/server_inner.log
             /tmp/bench/stats.json
           if-no-files-found: ignore
