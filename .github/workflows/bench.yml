@@ -16,6 +16,9 @@ on:
       submission:
         description: 'submission directory name under submissions/'
         default: 'c-iouring-ssmurfgg04-gif'
+      constrained:
+        description: "set to 1cpu2g for the challenge-spec mode: server on 1 core + MemoryMax=2G, swap off; loadgen gets the remaining cores"
+        default: ''
 
 permissions:
   contents: read
@@ -35,6 +38,7 @@ jobs:
     env:
       BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.server_branch || 'c-iouring-pr' }}
       SUBMISSION: ${{ github.event_name == 'workflow_dispatch' && inputs.submission || 'c-iouring-ssmurfgg04-gif' }}
+      CONSTRAINED: ${{ inputs.constrained }}
     steps:
       - uses: actions/checkout@v4
 
@@ -88,13 +92,17 @@ jobs:
         run: |
           bash "$GITHUB_WORKSPACE/scripts/run-bench.sh" \
             "${{ matrix.vus }}" "${{ matrix.ramp }}" "${{ matrix.hold }}" \
-            "${{ matrix.tag }}" "$HOME/tdsc" "$GITHUB_WORKSPACE/loadgen/loadgen"
+            "${{ matrix.tag }}" "$HOME/tdsc" "$GITHUB_WORKSPACE/loadgen/loadgen" "$CONSTRAINED"
 
       - name: job summary
         if: always()
         run: |
           {
-            echo "## ${{ matrix.tag }} (${{ matrix.vus }} VUs, hold ${{ matrix.hold }}s)"
+            if [ -n "$CONSTRAINED" ]; then
+              echo "## ${{ matrix.tag }} (${{ matrix.vus }} VUs, hold ${{ matrix.hold }}s, CONSTRAINED: server 1 core + 2GB no swap, loadgen on remaining cores)"
+            else
+              echo "## ${{ matrix.tag }} (${{ matrix.vus }} VUs, hold ${{ matrix.hold }}s, server 2 cores)"
+            fi
             echo
             echo '```'
             cat /tmp/bench/run.log 2>/dev/null | tail -25 || echo "(no run log)"
