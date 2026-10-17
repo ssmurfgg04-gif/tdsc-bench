@@ -24,6 +24,12 @@ if [ "$ok" != 1 ]; then
 fi
 echo "== server up: $(head -c 200 "$B/server.log" | tr '\n' ' ')"
 
+# CPU steal accounting: /proc/stat field 9 (steal jiffies) vs total jiffies.
+# GitHub runner VMs live on oversubscribed hosts; a noisy neighbor shows up
+# here as double-digit steal and inflates every latency number uniformly.
+read -r _ u n sys idle iow irq sirq steal rest < <(awk '/^cpu /{print; exit}' /proc/stat)
+J0=$((u+n+sys+idle+iow+irq+sirq+steal)); ST0=$steal
+
 echo "== bench: $TAG vus=$VUS ramp=${RAMP}s hold=${HOLD}s"
 sudo -n bash -c "ulimit -n 1048576; taskset -c 2-3 $LOADGEN 127.0.0.1 $PORT \
   $VUS $RAMP $HOLD $TDSC/seed/tokens.json 2 16" > "$B/run.log" 2>&1
@@ -35,6 +41,14 @@ sleep 1
 
 echo "== server log tail"
 tail -15 "$B/server.log" || true
+
+read -r _ u n sys idle iow irq sirq steal rest < <(awk '/^cpu /{print; exit}' /proc/stat)
+J1=$((u+n+sys+idle+iow+irq+sirq+steal)); ST1=$steal
+if [ $J1 -gt $J0 ]; then
+    echo "RIG: cpu steal $(( 100 * (ST1 - ST0) / (J1 - J0) ))% over the run (100% = fully stolen VM)"
+fi
+echo "RIG: loadavg $(cat /proc/loadavg)"
+grep -h . /proc/pressure/cpu 2>/dev/null | sed 's/^/RIG: psi /' || true
 
 RESULT=$(grep -o 'RESULT: [A-Z]*' "$B/run.log" | tail -1 || true)
 JSON=$(grep -o 'STATS_JSON: .*' "$B/run.log" | tail -1 | cut -d' ' -f2- || true)
