@@ -4,7 +4,7 @@
 set -uo pipefail
 VUS=$1 RAMP=$2 HOLD=$3 TAG=$4 TDSC=$5 LOADGEN=$6
 PORT=3100
-SUB="$TDSC/submissions/c-iouring-ssmurfgg04-gif"
+SUB="$TDSC/submissions/${SUBMISSION:-c-iouring-ssmurfgg04-gif}"
 B=/tmp/bench
 rm -rf "$B"; mkdir -p "$B"
 cp "$TDSC/seed/feed.db" "$B/feed.db"
@@ -30,7 +30,7 @@ sudo -n bash -c "ulimit -n 1048576; taskset -c 2-3 $LOADGEN 127.0.0.1 $PORT \
 RC=$?
 cat "$B/run.log"
 
-sudo pkill -f "bin/server" 2>/dev/null
+sudo pkill -f "$SUB/bin/server" 2>/dev/null
 sleep 1
 
 echo "== server log tail"
