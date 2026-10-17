@@ -65,6 +65,12 @@ jobs:
 
       - name: tune kernel for many connections
         run: |
+          # GitHub runners ship nf_conntrack_max=262144: once that many
+          # connections are tracked, new SYNs are dropped silently. The
+          # sink (zero app logic) fails 300k on it identically to any real
+          # server. Raise it so the bench measures the server, not the rig.
+          echo "conntrack before: max=$(cat /proc/sys/net/netfilter/nf_conntrack_max 2>/dev/null || echo n/a) count=$(cat /proc/sys/net/netfilter/nf_conntrack_count 2>/dev/null || echo n/a)"
+          sudo sysctl -w net.netfilter.nf_conntrack_max=1048576 2>/dev/null || echo "(no conntrack module)"
           sudo sysctl -w fs.file-max=4194304        || true
           sudo sysctl -w fs.nr_open=1048576          || true
           sudo sysctl -w net.core.somaxconn=65536    || true
