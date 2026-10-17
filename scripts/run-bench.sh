@@ -48,6 +48,7 @@ if [ $J1 -gt $J0 ]; then
     echo "RIG: cpu steal $(( 100 * (ST1 - ST0) / (J1 - J0) ))% over the run (100% = fully stolen VM)"
 fi
 echo "RIG: loadavg $(cat /proc/loadavg)"
+echo "RIG: cpu $(lscpu 2>/dev/null | awk -F: '/Model name/{gsub(/^ +/,"",$2); print $2; exit}')"
 grep -h . /proc/pressure/cpu 2>/dev/null | sed 's/^/RIG: psi /' || true
 
 RESULT=$(grep -o 'RESULT: [A-Z]*' "$B/run.log" | tail -1 || true)
